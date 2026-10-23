@@ -1,0 +1,81 @@
+services:
+  - type: web
+    name: uploader
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run.py
+    healthCheckPath: /healthz
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.5"
+      - key: RUN_SCHEDULER
+        value: "1"
+      - key: TENANT_ROOT
+        value: /var/data/tenants
+      - key: ROOT_DB
+        value: /var/data/root.db
+      - key: SETTINGS_FILE
+        value: /var/data/settings.json
+      - key: SECRET_KEY
+        sync: false
+      # 初回だけ使われる（以降は DB が正）
+      - key: ADMIN_USER
+        sync: false
+      - key: ADMIN_PASS
+        sync: false
+      # 非常口。設定すると管理者ログインで常に通る（未設定でも可）
+      - key: ADMIN_BREAKGLASS
+        sync: false
+      - key: SESSION_DAYS
+        value: "30"
+      - key: COOKIE_SECURE
+        value: "1"
+      # 管理画面のURL。推測されにくくしたい場合に変更（例: /panel-x7k2）
+      - key: ADMIN_PATH
+        value: admin
+      - key: SIGNUP_OPEN
+        value: "1"
+      - key: IG_USER
+        sync: false
+      - key: IG_PASS
+        sync: false
+      - key: IG_SESSION_B64
+        sync: false
+      # ---- 破損対策 ----
+      - key: DB_INTEGRITY
+        value: "1"
+      # ---- バックアップ（GitHub を外部ストレージにする） ----
+      - key: BACKUP_REPO
+        sync: false
+      - key: BACKUP_TOKEN
+        sync: false
+      - key: BACKUP_BRANCH
+        value: main
+      - key: BACKUP_EVERY
+        value: "600"
+      # ---- スパイ機能 ----
+      - key: SPY_MAX_MB
+        value: "4"
+      - key: TRACK_KEEP
+        value: "20000"
+      # ---- 通知（Discord / Slack / Telegram のどれか1つでOK） ----
+      - key: NOTIFY_WEBHOOK
+        sync: false
+      - key: NOTIFY_SLACK
+        sync: false
+      - key: NOTIFY_TELEGRAM_TOKEN
+        sync: false
+      - key: NOTIFY_TELEGRAM_CHAT
+        sync: false
+      - key: NOTIFY_BASE
+        sync: false
+      - key: NOTIFY_SKIP_BOT
+        value: "1"
+      - key: NOTIFY_MIN_SEC
+        value: "0"

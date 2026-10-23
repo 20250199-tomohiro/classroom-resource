@@ -1,0 +1,69 @@
+{% extends "base.html" %}{% block content %}
+<h1>設定</h1>
+
+{% if msg %}<p class="ok">{{ msg }}</p>{% endif %}
+{% if err %}<p class="err">{{ err }}</p>{% endif %}
+
+<div class="card">
+  <h2>Instagram 接続（このユーザー専用）</h2>
+  <p class="dim">このユーザーだけの設定として <code>{{ tenant_dir }}</code> に保存されます。
+  IG ユーザー名が空のときだけ環境変数（{{ env_user or "なし" }}）が使われます。</p>
+
+  <form method="post" action="/settings">
+    <label>IG ユーザー名 <input name="ig_user" value="{{ ig.username or '' }}"></label>
+    <label>IG パスワード <input name="ig_pass" type="password"
+      value="{{ ig.password or '' }}" placeholder="変更しないなら空でも可"></label>
+    <label>セッション (session.json の base64)
+      <textarea name="ig_session_b64" rows="4"
+        placeholder="空でもOK。貼ると次回起動時に復元します">{{ ig.session_b64 or '' }}</textarea></label>
+    <button>設定を保存</button>
+  </form>
+
+  <form method="post" action="/ig/test" style="display:inline">
+    <button>接続テスト</button></form>
+  <form method="post" action="/ig/login" style="display:inline">
+    <button>ログインしてセッション保存</button></form>
+  <form method="post" action="/ig/logout" style="display:inline">
+    <button>ログアウト</button></form>
+
+  <p class="dim">チャレンジを求められた場合は、ローカルで <code>session.json</code> を作って
+  上の欄にbase64で貼るのが確実です。</p>
+</div>
+
+<form method="post" action="/settings">
+{% for sec, val in sections.items() %}
+  <h2>{{ sec }}</h2>
+  <table>
+  {% for k, v in val.items() %}
+    <tr><th>{{ k }}</th><td>
+    {% if v is mapping %}
+      {% for k2, v2 in v.items() %}
+        <label class="inline">{{ k2 }}
+          <input name="{{ sec }}.{{ k }}.{{ k2 }}" value="{{ v2 }}"
+          {% if v2 is boolean %}type="checkbox" {% if v2 %}checked{% endif %}
+          {% elif v2 is number %}type="number" step="any"
+          {% else %}type="text"{% endif %}></label>
+      {% endfor %}
+    {% else %}
+      <input name="{{ sec }}.{{ k }}" value="{{ v }}"
+      {% if k == 'password' %}type="password"
+      {% elif v is boolean %}type="checkbox" {% if v %}checked{% endif %}
+      {% elif v is number %}type="number" step="any"
+      {% else %}type="text"{% endif %}>
+    {% endif %}
+    </td></tr>
+  {% endfor %}
+  </table>
+{% endfor %}
+
+<h2>監視対象（1行1件・@不要）</h2>
+<textarea name="__targets" rows="5">{{ targets }}</textarea>
+<h2>本体候補（1行1件）</h2>
+<textarea name="__candidates" rows="5">{{ candidates }}</textarea>
+
+<button>保存</button>
+</form>
+
+<p class="dim">※ 監視間隔（monitor）の変更は次回tick以降に反映されます。<br>
+※ <code>web.port</code> は Render の PORT が優先されます。</p>
+{% endblock %}
